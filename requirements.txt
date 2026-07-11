@@ -1,3 +1,5 @@
+#   pip install -r requirements.txt
+
 streamlit
 yt-dlp
 transformers
@@ -6,3 +8,5 @@ openai
 groq
 sentence-transformers
 faiss-cpu
+python-dotenv
+torch

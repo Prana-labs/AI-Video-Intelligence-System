@@ -6,7 +6,7 @@ A powerful RAG (Retrieval-Augmented Generation) based YouTube chatbot that extra
 
 - **YouTube Transcript Extraction**: Automatically extracts captions from YouTube videos using yt-dlp
 - **Smart RAG Implementation**: Uses vector embeddings and FAISS for efficient retrieval
-- **Groq LLM Integration**: Powered by Groq's fast LLM for accurate answers
+- **Openai LLM Integration**: Powered by Openai's fast LLM for accurate answers
 - **Cost-Efficient**: Only sends relevant transcript chunks to reduce API costs
 - **Multiple Caption Formats**: Supports both manual and auto-generated captions
 - **Fallback Support**: Uses Hugging Face model when Groq is unavailable

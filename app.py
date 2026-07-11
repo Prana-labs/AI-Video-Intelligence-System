@@ -5,10 +5,14 @@ import yt_dlp
 import requests
 import json
 import os
-from groq import Groq
+from openai import OpenAI
 from sentence_transformers import SentenceTransformer
 import faiss
 import numpy as np
+from dotenv import load_dotenv
+
+# Load environment variables from .env file
+load_dotenv()
 
 st.set_page_config(page_title="YouTube Transcript + RAG", layout="wide")
 
@@ -20,19 +24,19 @@ def load_embedding_model():
     """Load sentence transformer model for embeddings"""
     return SentenceTransformer('all-MiniLM-L6-v2')
 
-# Initialize Groq client
-def get_groq_client():
-    """Get Groq client with API key from environment or session state"""
+# Initialize OpenAI client
+def get_openai_client():
+    """Get OpenAI client with API key from environment or session state"""
     # First try environment variable
-    api_key = os.getenv('GROQ_API_KEY')
-    
+    api_key = os.getenv('OPENAI_API_KEY')
+
     # If not in environment, try session state
-    if not api_key and 'groq_api_key' in st.session_state:
-        api_key = st.session_state.groq_api_key
-    
+    if not api_key and 'openai_api_key' in st.session_state:
+        api_key = st.session_state.openai_api_key
+
     if not api_key:
         return None
-    return Groq(api_key=api_key)
+    return OpenAI(api_key=api_key)
 
 def create_chunks(text, chunk_size=500, overlap=50):
     """Split text into overlapping chunks"""
@@ -75,12 +79,12 @@ def retrieve_relevant_chunks(question, chunks, index, embedding_model, top_k=3):
     
     return relevant_chunks, scores[0]
 
-def ask_groq_question(client, question, relevant_chunks):
-    """Ask question using Groq LLM with only relevant chunks"""
+def ask_openai_question(client, question, relevant_chunks):
+    """Ask question using OpenAI LLM with only relevant chunks"""
     try:
         # Combine relevant chunks
         context = "\n\n".join(relevant_chunks)
-        
+
         prompt = f"""Based on the following relevant parts of a YouTube video transcript, please answer the question accurately and concisely.
 
 RELEVANT TRANSCRIPT PARTS:
@@ -91,18 +95,18 @@ QUESTION: {question}
 Please provide a clear, accurate answer based only on the information in the provided transcript parts. If the answer cannot be found in these parts, say so."""
 
         response = client.chat.completions.create(
-            model="llama3-8b-8192",  # Correct Groq model
+            model="gpt-4o-mini",  # OpenAI model
             messages=[
                 {"role": "system", "content": "You are a helpful assistant that answers questions based on provided transcript parts accurately and concisely."},
                 {"role": "user", "content": prompt}
             ],
             temperature=0.3,
-            max_tokens=300  # Reduced for efficiency
+            max_tokens=300
         )
-        
-        return response.choices[0].message.content, 0.95  # High confidence for Groq
+
+        return response.choices[0].message.content, 0.95  # High confidence for OpenAI
     except Exception as e:
-        st.error(f"Error with Groq API: {e}")
+        st.error(f"Error with OpenAI API: {e}")
         return None, 0.0
 
 def parse_json_captions(json_text):
@@ -135,94 +139,102 @@ def parse_srt_captions(srt_text):
     
     return ' '.join(transcript_parts)
 
+def get_best_english_key(captions_dict):
+    """Return the best available English caption key from a captions dict."""
+    if not captions_dict:
+        return None
+    # Prefer exact 'en', then any key starting with 'en'
+    if 'en' in captions_dict:
+        return 'en'
+    for key in captions_dict:
+        if key.startswith('en'):
+            return key
+    return None
+
 def get_transcript_with_ytdlp(video_url):
     """Get transcript using yt-dlp method"""
     try:
         ydl_opts = {
             'writesubtitles': True,
             'writeautomaticsub': True,
-            'subtitleslangs': ['en'],
             'skip_download': True,
             'quiet': True,
             'no_warnings': True
         }
-        
+
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
             info = ydl.extract_info(video_url, download=False)
-            
+
             # Try manual subtitles first
-            if 'subtitles' in info and 'en' in info['subtitles']:
-                subtitle_url = info['subtitles']['en'][0]['url']
+            manual_key = get_best_english_key(info.get('subtitles', {}))
+            if manual_key:
+                subtitle_url = info['subtitles'][manual_key][0]['url']
                 response = requests.get(subtitle_url)
                 if response.status_code == 200:
                     subtitle_text = response.text
-                    
-                    # Try parsing as JSON first
+
                     json_result = parse_json_captions(subtitle_text)
                     if json_result:
                         return json_result, "Manual captions (JSON)"
-                    
-                    # Try parsing as SRT
+
                     srt_result = parse_srt_captions(subtitle_text)
                     if srt_result:
                         return srt_result, "Manual captions (SRT)"
-            
+
             # Try automatic subtitles if manual ones aren't available
-            if 'automatic_captions' in info and 'en' in info['automatic_captions']:
-                subtitle_url = info['automatic_captions']['en'][0]['url']
+            auto_key = get_best_english_key(info.get('automatic_captions', {}))
+            if auto_key:
+                subtitle_url = info['automatic_captions'][auto_key][0]['url']
                 response = requests.get(subtitle_url)
                 if response.status_code == 200:
                     subtitle_text = response.text
-                    
-                    # Try parsing as JSON first
+
                     json_result = parse_json_captions(subtitle_text)
                     if json_result:
-                        return json_result, "Auto-generated captions (JSON)"
-                    
-                    # Try parsing as SRT
+                        return json_result, f"Auto-generated captions (JSON, lang: {auto_key})"
+
                     srt_result = parse_srt_captions(subtitle_text)
                     if srt_result:
-                        return srt_result, "Auto-generated captions (SRT)"
-            
+                        return srt_result, f"Auto-generated captions (SRT, lang: {auto_key})"
+
             return None, "No captions found"
-            
+
     except Exception as e:
         st.error(f"Error extracting transcript: {e}")
         return None, "Error"
 
-# Add Groq API setup in sidebar
+# Add OpenAI API setup in sidebar
 st.sidebar.markdown("---")
-st.sidebar.subheader("🔑 Groq API Setup")
+st.sidebar.subheader("🔑 OpenAI API Setup")
 
 # Check if API key is already set
-api_key = os.getenv('GROQ_API_KEY')
+api_key = os.getenv('OPENAI_API_KEY')
 
 if api_key:
-    st.sidebar.success("✅ GROQ_API_KEY from environment!")
+    st.sidebar.success("✅ OPENAI_API_KEY from environment!")
     st.sidebar.info(f"Key: {api_key[:10]}...")
 else:
-    st.sidebar.warning("⚠️ GROQ_API_KEY not found in environment!")
-    
+    st.sidebar.warning("⚠️ OPENAI_API_KEY not found in environment!")
+
     # Allow manual input
     manual_api_key = st.sidebar.text_input(
-        "Enter your Groq API Key:",
+        "Enter your OpenAI API Key:",
         type="password",
-        help="Get free API key from groq.com"
+        help="Get your API key from platform.openai.com"
     )
-    
+
     if manual_api_key:
-        st.session_state.groq_api_key = manual_api_key
+        st.session_state.openai_api_key = manual_api_key
         st.sidebar.success("✅ API Key saved!")
-        st.sidebar.info("You can now use Groq for better answers!")
-    
+        st.sidebar.info("You can now use OpenAI for better answers!")
+
     st.sidebar.markdown("""
-    **To get free API key:**
-    1. Go to [groq.com](https://console.groq.com)
-    2. Sign up for free account
-    3. Get your API key from console
-    
-    **Free tier:** 100 requests/minute
-    **Models:** llama3-8b-8192, mixtral-8x7b-32768, etc.
+    **To get your API key:**
+    1. Go to [platform.openai.com](https://platform.openai.com/api-keys)
+    2. Sign in to your account
+    3. Create a new secret key
+
+    **Model used:** gpt-4o-mini
     """)
 
 # Step 1: Input YouTube URL
@@ -285,43 +297,43 @@ if st.button("Get Transcript"):
 if 'transcript' in st.session_state and st.session_state.transcript:
     st.subheader("Ask Questions about the Video")
     
-    # Check if Groq is available
-    groq_client = get_groq_client()
-    
-    if groq_client:
-        st.success("✅ Groq LLM connected - Efficient RAG answers available!")
+    # Check if OpenAI is available
+    openai_client = get_openai_client()
+
+    if openai_client:
+        st.success("✅ OpenAI connected - Efficient RAG answers available!")
         question = st.text_input("Enter your question:")
-        
+
         if question:
             with st.spinner("Retrieving relevant chunks and generating answer..."):
                 try:
                     # Retrieve relevant chunks
                     relevant_chunks, scores = retrieve_relevant_chunks(
-                        question, 
-                        st.session_state.chunks, 
-                        st.session_state.index, 
+                        question,
+                        st.session_state.chunks,
+                        st.session_state.index,
                         st.session_state.embedding_model
                     )
-                    
+
                     # Show relevant chunks (for transparency)
                     with st.expander("🔍 Relevant transcript parts used:"):
                         for i, (chunk, score) in enumerate(zip(relevant_chunks, scores)):
                             st.write(f"**Chunk {i+1} (Relevance: {score:.2f}):**")
                             st.write(chunk)
                             st.write("---")
-                    
+
                     # Generate answer with only relevant chunks
-                    answer, confidence = ask_groq_question(groq_client, question, relevant_chunks)
+                    answer, confidence = ask_openai_question(openai_client, question, relevant_chunks)
                     if answer:
                         st.write("**Answer:**", answer)
                         st.write(f"**Confidence:** {confidence:.2%}")
                         st.info(f"💡 Used {len(relevant_chunks)} relevant chunks instead of full transcript (much more efficient!)")
                     else:
-                        st.error("Failed to get answer from Groq.")
+                        st.error("Failed to get answer from OpenAI.")
                 except Exception as e:
                     st.error(f"Error generating answer: {e}")
     else:
-        st.warning("⚠️ Groq API key not found. Using fallback Hugging Face model.")
+        st.warning("⚠️ OpenAI API key not found. Using fallback Hugging Face model.")
         question = st.text_input("Enter your question:")
         
         if question:

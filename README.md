@@ -16,7 +16,7 @@ A powerful RAG (Retrieval-Augmented Generation) based YouTube chatbot that extra
 1. **Clone the repository**
    ```bash
    git clone https://github.com/.git
-   cd AI-Video-Intelligence-System"
+   cd AI-Video-Intelligence-System
    ```
 
 2. **Create virtual environment**
@@ -75,7 +75,7 @@ AI-Video-Intelligence-System/
 ├── requirements.txt       # Python dependencies
 ├── README.md             # Project documentation
 ├── .gitignore           # Git ignore rules
-└── YT_CHATBOT_env/      # Virtual environment (not tracked)
+└── YTenv/                # Virtual environment (not tracked)
 ```
 
 ## 🔧 How It Works
@@ -142,7 +142,7 @@ This project is open source and available under the [MIT License](LICENSE).
 
 ## 🙏 Acknowledgments
 
-- [Groq](https://groq.com) for fast LLM API
+- [OPENAI](https://openai.com/api/) for fast LLM API
 - [yt-dlp](https://github.com/yt-dlp/yt-dlp) for YouTube processing
 - [Sentence Transformers](https://www.sbert.net/) for embeddings
 - [FAISS](https://github.com/facebookresearch/faiss) for vector search
@@ -152,7 +152,7 @@ This project is open source and available under the [MIT License](LICENSE).
 For issues and questions:
 - Create an issue on GitHub
 - Check the troubleshooting section in the app
-- Ensure your Groq API key is valid
+- Ensure your OPENAI API KEY is valid
 
 ---
 

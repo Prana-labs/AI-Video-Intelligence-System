@@ -1,0 +1,8 @@
+streamlit
+yt-dlp
+transformers
+requests
+openai
+groq
+sentence-transformers
+faiss-cpu

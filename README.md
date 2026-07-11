@@ -122,7 +122,7 @@ AI-Video-Intelligence-System/
 
 - `streamlit` - Web application framework
 - `yt-dlp` - YouTube video processing
-- `groq` - LLM API integration
+- `OPENAI` - LLM API integration
 - `sentence-transformers` - Text embeddings
 - `faiss-cpu` - Vector similarity search
 - `transformers` - Hugging Face models
